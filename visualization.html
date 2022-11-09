@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="utf-8">
+        <title>	hslseeesaid figure 6 </title>
+        <meta name="description" content="A shell html page to render a d3 visualization for the 2021 NISS competition.">
+        <meta name="viewport" content="width=device-width">
+    </head>
+    <body>
+        <section>
+            <div id="frame">
+                <p>FIGURE 6. Ratings of importance of selected aspects of a job compared to salary among 2009 ninth-graders in 2016</p>
+				<div id="topbar">
+					<div id="visualization"></div>
+					<div id="infobar">
+						<div id="legend"></div>
+						<div id="map"></div>
+					</div>
+				</div>
+				<div id="toolbar">
+				<div id="dropdown_frame">
+                         <p>Aspect of a job:</p>
+                         <select id = "dropdown">
+                            <option value="Job security">Job security</option>
+                            <option value="Balancing work and personal life">Balancing work and personal life</option>
+                            <option value="Contributing to society">Contributing to society</option>
+                            <option value="Autonomy">Autonomy</option>
+                            <option value="Geographic location">Geographic location</option>
+                            <option value="Working with a team">Working with a team</option>
+                         </select>
+                    </div>
+					<div id="selected_region">
+						<label for="Region">Choose a Region:</label>
+							<select id="USARegion" multiple style="width:100%; height:88%;">
+								<option value="All" selected>All</option>
+								<option value="1">Northeast</option>		
+								<option value="2">Midwest</option>
+								<option value="3">South</option>
+								<option value="4">West</option>
+							</select>
+					</div>
+				</div>
+			</div>
+        </section>
+    </body>
+	<style>
+		#topbar {
+			display: inline-flex;
+		}
+		#toolbar {
+			margin-right: 50%;
+			display: inline-flex;
+		}
+		#legend {
+			margin-top: 40px;
+			margin-left: 30px;
+		}
+		#map {
+			margin-left: 30px;
+		}
+		#dropdown_frame {
+			margin-left: 60px;
+		}
+		#selected_region {
+			margin-left: 30px;
+		}
+		#visualization {
+			margin-left: 30px;
+		}
+		
+	</style>
+	<script src="https://d3js.org/d3.v4.js"></script>
+	<script src="Data/HSLSEEESAID.js"></script>
+    <script src="Data/USAMap.js"></script>
+	<script>
+		// DATA MANAGEMENT: THIS SECTION DEFINES FUNCTIONS THAT PREFORM DATA MANAGEMENT TASKS.
+
+	// Function that filters json data by certain values of a given column.
+	// filterbyvalues: an array of values to keep.
+	// filterbycolumn: the column that contains filterbyvalues.
+	// data: the javascript object containing a list of observations.
+	// returns: filtered data.
+	function FilterData(filterbyvalues, filterbycolumn, ){
+		var removeindexes = [];
+		data.observations.forEach(function(observation, index){
+			// The resulting array of indexes to remove should be in reverse order.
+			if (!filterbyvalues.includes(observation[filterbycolumn])) removeindexes.unshift(index);
+		});
+		var filtered = JSON.parse(JSON.stringify(data));
+		removeindexes.forEach(function(value){
+		   filtered.observations.splice(value, 1); 
+		});
+		return filtered;
+	}
+
+	// This function extracts a single column from the json encoded data set.
+	// columnname: the name of the column to exract.
+	// data: the data object containing a list of observations.
+	// returns: a single "column" represented as an array of values.
+	function ExtractColumn(columnname, data){
+		var column = new Array(data.observations.length);
+		data.observations.forEach(function(observation, index){
+			column[index] = observation[columnname];
+		});
+		return column;
+	}
+
+	// This function extracts (list-wise deletes) missing values from a column before graphing.
+	// DS: It appears that this dataset doesn't have missing values indicated in the reference document,
+	// however, in the interests of generalizability we include a method that strips out missing values.
+	// column: A column of data returned by the Extractcolumn function.
+	// extract_values: An array of strings considered missing values.
+	// returns: a column of data without missing values.
+	function ExtractMissing(column, extract_values){
+		if (extract_values.length > 0){ // if there isn't anything to delete, then just return the input column.
+			var remove_indexes = [];
+			column.forEach(function(observation, index){
+				if (extract_values.includes[observation]) remove_indexes.unshift(index);
+			});
+			remove_indexes.forEach(function(value){ column.splice(value, 1); });
+		}
+		return column;
+	}
+
+	// This function converts a "column" to a set of frequencies.
+	// column: an array of key value pairs.
+	// returns: an array of key value pairs. Values are frequencies.
+	function GenerateFrequencies(column){
+		var frequencies = {};
+		column.forEach(function(value, index){
+			if (frequencies[value]){ // seen this value before
+				frequencies[value] = frequencies[value] + 1;
+			}
+			else{
+				frequencies[value] = 1;
+			}
+		});
+		//var result = Object.keys(frequencies).map((key) => [Number(key), frequencies[key]]);
+		return frequencies;
+	}
+
+	// LEGEND: THIS SECTION DEFINES FUNCTIONS THAT RENDER THE SVG ELEMENTS.
+
+	function DrawLegend(legend, width, c_radius, color, data){
+		// legend based on example found here: https://www.d3-graph-gallery.com/graph/custom_legend.html
+		const padding = 10
+		var stepdown = (2 * c_radius) + padding;
+		var height = (stepdown * data.length);
+		var text_offset = 15 + (2 * c_radius);
+		
+		var legend = d3.select("#legend")
+			  .append("svg")
+			  .attr("width", width)
+			  .attr("height", height)
+			  .append("g")
+		
+		var lgroup = legend
+		  .selectAll("circle")
+		  .data(data)
+		  .enter()
+		  .append("circle")
+		  .attr("cx", padding + c_radius)
+		  .attr("cy", function(d) { return (height - c_radius - padding) - (d.index * stepdown) })
+		  .attr("r", c_radius)
+		  .style("fill", function(d){ return color(d.data.key) })
+		
+		lgroup
+		  .exit()
+		  .remove()
+		
+		texts = legend.selectAll("text")
+			.data(data)
+		
+		texts
+		  .enter()
+		  .append("text")
+		  .attr("x", text_offset)
+		  .attr("y", function(d){ return (height - padding) - (d.index * stepdown) })
+		  .text(function(d){ return d.data.key })
+		  .style("font-size", "15px")
+		  .attr("alignment-baseline","middle")
+		
+		texts
+		  .exit()
+		  .remove()
+		return legend;
+	}
+
+	function RenderMap(map, geojson, region){
+		//Define projection to display map. Projection is required to plot map from 3D to 2D planar form  
+		var projection = d3.geoAlbers() 	
+							  .scale(250)
+							  .translate([MAP_WIDTH/2, MAP_WIDTH/2]);
+		// define path for each region based on projection
+		var path = d3.geoPath().projection(projection)
+		var regions = map.append( "g" )
+						.selectAll( "path" )
+						.data(geojson.features)
+						.enter()
+		regions
+			.append( "path" )
+			.attr( "d", path )
+			.attr( "fill", "#c7c7c7" )
+			.attr("stroke", function(d,i) { // selected region gets larger stroke to distinguish it from others
+				if (region.includes(d.properties.NAME)){ return '#0E872E';}
+				else { return '#333';}
+			})
+			.attr("stroke-width", function(d,i) { // selected region gets larger stroke to distinguish it from others
+				if (region.includes(d.properties.NAME)){ return 1.5;}
+				else { return 0.5;}
+			})
+			.attr("fill-opacity", 0)
+			.attr("id", function(d) { return d.properties.NAME; })
+		}
+
+	// This function is the main interface and will draw or update the VISUALIZATION.
+	function DrawVisualization(vis_width, vis_height, margin, radius,
+							   columnname, columnnamelist,
+							   filterbycolumn, filterbyvalues,
+							   data, missing, svg,
+							   update=true){
+		
+		// DS: This visualization inspired by https://www.d3-graph-gallery.com/graph/pie_changeData.html
+		// Data management
+		var filtered = FilterData(filterbyvalues, filterbycolumn, data)
+		var column = ExtractColumn(columnname, filtered)
+		var column = ExtractMissing(column, missing)
+		var frequencies = GenerateFrequencies(column)
+		// Color scale
+		var color = d3.scaleOrdinal()
+		  .domain(columnnamelist)
+		  .range(["#f54040", "#c7c7c7", "#4056ff"]);
+		// Update the plot	
+		// Compute the position of each group on the pie
+		var pie = d3.pie()
+			.value(function(d) {return d.value; });
+		
+		var entries = d3.entries(frequencies).sort(function(a, b) { return d3.ascending(a.key, b.key); });
+		
+		var data_ready = pie(entries);
+		
+		//DrawLegend(legend, 200, 6, color, data_ready)
+		var arc_generator = d3.arc()
+			.innerRadius(RADIUS/2)
+			.outerRadius(RADIUS)    
+	
+		// Build the visualization.
+		var group = svg.selectAll("path")
+		  .data(data_ready)
+
+		group
+		  .enter()
+		  .append('path')
+		  .merge(group)
+		  .transition()
+		  .duration(1000)
+		  .attr('d', arc_generator)
+		  .attr('fill', function(d){ return(color(d.data.key)) })
+		  .attr("stroke", "white")
+		  .style("stroke-VIS_WIDTH", "2px")
+		  .style("opacity", 1)
+
+		group
+		  .exit()
+		  .remove()
+		
+		var texts = svg.selectAll("text").data(data_ready)
+		if (update) { // Update the text with animation.
+		texts
+		  .enter()
+		  .append('text')
+		  .merge(texts)
+		  .transition()
+		  .duration(1000)
+		  .text(function(d){ return d3.format(".0%")(d.value / column.length) })
+		  .attr("transform", function(d) { return "translate(" + arc_generator.centroid(d) + ")";  })
+		  .style("text-anchor", "middle")
+		  .style("font-size", 17)
+		texts
+		  .exit()
+		  .remove()
+		}
+		else { // Do this when the page loads. Update the text without animating to avoid animating transform translation.
+		texts
+		  .data(data_ready)
+		  .enter()
+		  .append('text')
+		  .text(function(d){ return d3.format(".0%")(d.value / column.length) })
+		  .attr("transform", function(d) { return "translate(" + arc_generator.centroid(d) + ")";  })
+		  .style("text-anchor", "middle")
+		  .style("font-size", 17)
+		
+		DrawLegend(legend, 200, 6, color, data_ready)
+
+		}
+		return svg;
+	}
+
+	// CALLBACK: THIS SECTION DEFINES CALLBACK FUNCTIONS
+
+	// Callback function updates the plot when the dropdown selection changes.
+	document.getElementById('dropdown').addEventListener("change", function(){
+		var column_index = document.getElementById("dropdown").selectedIndex;
+		var selected_index = document.getElementById("USARegion").selectedIndex;
+		d3.select("#mapsvg > *").remove();
+		if (selected_index == 0){ // all
+			SELECTED_REGIONS = ["Midwest", "West", "South", "Northeast"];
+		}
+		else if (selected_index == 1){
+			SELECTED_REGIONS = ["Northeast"];
+		}
+		else if (selected_index == 2){
+			SELECTED_REGIONS = ["Midwest"];
+		}
+		else if (selected_index == 3){
+			SELECTED_REGIONS = ["South"];
+		}
+		else if (selected_index == 4){
+			SELECTED_REGIONS = ["West"];
+		}
+		d3.select("#mapsvg > *").remove();
+		RenderMap(SVG_MAP, USAMap, SELECTED_REGIONS);
+		DrawVisualization(VIS_WIDTH, VIS_HEIGHT, MARGIN, RADIUS,
+					  COLUMN_NAMES[column_index], COLUMN_NAMES,
+					  "X4REGION", SELECTED_REGIONS,
+					  data, MISSING_VALUES, VISUALIZATION);
+	});
+	
+	document.getElementById('USARegion').addEventListener("change", function(){
+		var column_index = document.getElementById("dropdown").selectedIndex;
+		var selected_index = document.getElementById("USARegion").selectedIndex;
+		d3.select("#mapsvg > *").remove();
+		if (selected_index == 0){ // all
+			SELECTED_REGIONS = ["Midwest", "West", "South", "Northeast"];
+		}
+		else if (selected_index == 1){
+			SELECTED_REGIONS = ["Northeast"];
+		}
+		else if (selected_index == 2){
+			SELECTED_REGIONS = ["Midwest"];
+		}
+		else if (selected_index == 3){
+			SELECTED_REGIONS = ["South"];
+		}
+		else if (selected_index == 4){
+			SELECTED_REGIONS = ["West"];
+		}
+		d3.select("#mapsvg > *").remove();
+		RenderMap(SVG_MAP, USAMap, SELECTED_REGIONS);
+		DrawVisualization(VIS_WIDTH, VIS_HEIGHT, MARGIN, RADIUS,
+					  COLUMN_NAMES[column_index], COLUMN_NAMES,
+					  "X4REGION", SELECTED_REGIONS,
+					  data, MISSING_VALUES, VISUALIZATION);
+	});
+
+	// DRIVER: THIS SECTION DEFINES THE LOGIC THAT SETS UP THE VISUALIZATION WHEN THE PAGE LOADS FOR THE FIRST TIME.
+
+	// Constants and global variables are written in upper case.
+	const COLUMN_LABELS = ["Job security", "Balancing work and personal life", "Contributing to society",
+						"Autonomy", "Geographic location", "Working with a team"];
+	const COLUMN_NAMES = ["S4JOBSECURE", "S4JOBBALANCE", "S4JOBCONTRIB", "S4JOBDECISION", "S4LOCATION", "S4JOBTEAMWRK"];
+
+	const START_COLUMN_INDEX = 0;
+
+	const MISSING_VALUES = [];
+
+	const VIS_WIDTH = 500
+		  VIS_HEIGHT = 500
+		  MARGIN = 40
+		  
+	const MAP_WIDTH = 200
+		  MAP_HEIGHT = 200
+		  MARGIN = 10
+
+	const RADIUS = Math.min(VIS_WIDTH, VIS_HEIGHT) / 2 - MARGIN;
+
+	var SELECTED_REGIONS = ["Midwest", "West", "South", "Northeast"];
+
+	// Render the map
+	var SVG_MAP = d3.select('#map')
+		  .append("svg")
+		  .attr("width", MAP_WIDTH)
+		  .attr("height", MAP_HEIGHT)
+		  .attr("id","mapsvg")
+	
+	RenderMap(SVG_MAP, USAMap, SELECTED_REGIONS)
+
+	// Render the visualization
+
+	var VISUALIZATION = d3.select("#visualization")
+	  .append("svg")
+		.attr("width", VIS_WIDTH)
+		.attr("height", VIS_HEIGHT)
+		.append("g")
+		.attr("transform", "translate(" + VIS_WIDTH / 2 + "," + VIS_HEIGHT / 2 + ")")
+
+	var column_index = document.getElementById("dropdown").selectedIndex = START_COLUMN_INDEX;
+
+	// note that the "data" variable is defined in the Data/HSLSEEESAID.js script.
+	DrawVisualization(VIS_WIDTH, VIS_HEIGHT, MARGIN, RADIUS,
+					  COLUMN_NAMES[START_COLUMN_INDEX], COLUMN_NAMES,
+					 "X4REGION", SELECTED_REGIONS,
+					 data, MISSING_VALUES, VISUALIZATION, update=false);
+	</script>
+</html>
